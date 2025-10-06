@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, jsonify, send_file, abort
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 import os
 import json
 from pathlib import Path
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for React frontend
+socketio = SocketIO(app, cors_allowed_origins="*")  # Enable WebSocket
 
 # Configuration
 UPLOAD_FOLDER = 'pcb_files'
@@ -51,6 +53,9 @@ def load_pcb():
         import shutil
         shutil.copy2(source_path, destination)
         
+        # Send result to frontend via WebSocket
+        socketio.emit('pcb_loaded', 'result')
+
         return jsonify({
             'success': True,
             'filename': filename,
@@ -60,6 +65,18 @@ def load_pcb():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+# ------------------------
+# WebSocket events
+# ------------------------
+@socketio.on('connect')
+def ws_connect():
+    print('Client connected')
+    emit('message', {'msg': 'Connected to server'})
+
+@socketio.on('disconnect')
+def ws_disconnect():
+    print('Client disconnected')
 
 @app.route('/pcb/<filename>')
 def serve_pcb(filename):
@@ -102,4 +119,4 @@ def validate_path():
 if __name__ == '__main__':
     # Create upload folder if it doesn't exist
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
